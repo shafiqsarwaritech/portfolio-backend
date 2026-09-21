@@ -1,4 +1,4 @@
-name: Backend CI
+name: Backend CI/CD
 
 on:
   pull_request:
@@ -11,41 +11,66 @@ permissions:
   contents: read
 
 concurrency:
-  group: backend-ci-${{ github.ref }}
+  group: backend-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
     name: Lint, Test, and Security Audit
     runs-on: ubuntu-latest
-
     env:
       DATABASE_URL: "sqlite+pysqlite:///:memory:"
       JWT_SECRET: test-secret-key-with-at-least-32-bytes
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: admin123
       MINIO_ENDPOINT: localhost:9000
-
     steps:
       - name: Check out source
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
           cache: pip
-
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
-
       - name: Ruff
         run: ruff check .
-
       - name: Tests
         run: pytest --cov=app --cov-report=term-missing
-
       - name: Dependency security audit
         run: pip-audit
+
+  deploy:
+    name: Deploy Backend
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: test
+    runs-on: [self-hosted, Linux, X64]
+    timeout-minutes: 15
+    steps:
+      - name: Check out tested revision
+        uses: actions/checkout@v4
+      - name: Synchronize source
+        run: |
+          rsync -a --delete \
+            --exclude '.git' \
+            --exclude '.env' \
+            --exclude '.venv' \
+            --exclude '.coverage' \
+            --exclude 'portfolio_backend.egg-info' \
+            ./ /home/deploy/portfolio/backend/
+      - name: Install, migrate, and activate
+        working-directory: /home/deploy/portfolio/backend
+        run: |
+          uv pip install --python .venv/bin/python -e .
+          .venv/bin/alembic upgrade head
+          sudo /usr/bin/systemctl restart portfolio-backend
+      - name: Verify deployment
+        run: |
+          for attempt in 1 2 3 4 5; do
+            curl --fail --silent http://127.0.0.1:8000/health && exit 0
+            sleep 2
+          done
+          exit 1

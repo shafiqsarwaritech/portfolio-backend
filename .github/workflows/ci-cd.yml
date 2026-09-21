@@ -20,7 +20,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      DATABASE_URL: sqlite+pysqlite:///:memory:
+      DATABASE_URL: "sqlite+pysqlite:///:memory:"
       JWT_SECRET: test-secret-key-with-at-least-32-bytes
       ADMIN_USERNAME: admin
       ADMIN_PASSWORD: test-admin-password

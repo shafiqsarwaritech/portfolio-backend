@@ -65,6 +65,7 @@ jobs:
         working-directory: /home/deploy/portfolio/backend
         run: |
           uv pip install --python .venv/bin/python -e .
+          git restore portfolio_backend.egg-info/PKG-INFO portfolio_backend.egg-info/requires.txt 2>/dev/null || true
           .venv/bin/alembic upgrade head
           sudo /usr/bin/systemctl restart portfolio-backend
       - name: Verify deployment
